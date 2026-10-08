@@ -1,9 +1,16 @@
 import streamlit as st
 import pandas as pd
 
-st.title("🌍 Global Seismic Trends")
+st.title("Global Seismic Trends")
 
-df = pd.read_csv("2.5_day.csv")
+df = pd.read_csv("earthquakes_cleaned.csv")
+
+df = df.drop_duplicates()
+df["time"] = pd.to_datetime(df["time"], errors="coerce")
+df["updated"] = pd.to_datetime(df["updated"], errors="coerce")   
+
+st.write("Total Missing Values:", df.isnull().sum().sum())
+st.write("Total Duplicate Rows:", df.duplicated().sum())
 
 st.write("### Earthquake Data")
 st.dataframe(df)
