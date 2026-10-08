@@ -3,7 +3,7 @@ import mysql.connector
 conn = mysql.connector.connect(
     host="localhost",
     user="root",
-    password="bhuvana2004",
+    password="",
     database="global_seismic_trends"
 )
 
