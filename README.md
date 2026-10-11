@@ -44,18 +44,27 @@ The project uses Python, Pandas, NumPy, MySQL, data analysis, data visualization
 
 ## Data Cleaning
 
-The earthquake dataset was checked for missing values and duplicate records.
+The original earthquake dataset was inspected and cleaned using Python and Pandas.
 
-The final cleaned dataset contains:
+**Before Cleaning:**
+- Rows: 39,331
+- Columns: 28
+- Missing Values: 169,451
+- Duplicate Rows: 0
 
-* **Rows:** 28
-* **Columns:** 26
-* **Missing Values:** 0
-* **Duplicate Rows:** 0
+**Cleaning Steps:**
+- Identified and removed 4 columns containing only missing values: `magError`, `depthError`, `magNst`, and `magSource`.
+- Filled missing values in `nst`, `dmin`, `gap`, and `rms` using their respective median values.
+- Removed duplicate records, if any.
+- Converted `time` and `updated` columns to datetime format.
 
-The `time` and `updated` columns were converted into datetime format.
+**After Cleaning:**
+- Rows: 39,331
+- Columns: 24
+- Missing Values: 0
+- Duplicate Rows: 0
 
-Additional analysis columns such as `year`, `month`, `month_name`, and `depth_category` were created to support the analysis.
+The cleaned data is used by the Streamlit application for earthquake analysis and visualization.
 
 ## Analysis Performed
 
