@@ -1,82 +1,217 @@
 
 import streamlit as st
 import pandas as pd
+import mysql.connector
+
+st.set_page_config(
+    page_title="Global Seismic Trends",
+    layout="wide"
+)
 
 st.title("Global Seismic Trends")
 st.write("Earthquake Data Analysis and Visualization")
 
-# Load original dataset
-df = pd.read_csv("earthquakes_final.csv")
+# 1. Load original dataset for BEFORE cleaning metrics
+try:
+    original = pd.read_csv("earthquakes_final.csv")
+except FileNotFoundError:
+    st.error("earthquakes_final.csv was not found.")
+    st.stop()
 
-# 1. Check data before cleaning
-missing_before = int(df.isnull().sum().sum())
-duplicates_before = int(df.duplicated().sum())
-rows_before = len(df)
-columns_before = len(df.columns)
+# 2. MySQL connection
+st.sidebar.header("MySQL Connection")
 
-st.subheader("Data Cleaning")
+password = st.sidebar.text_input(
+    "MySQL Password",
+    type="password"
+)
 
-st.write("Rows Before Cleaning:", rows_before)
-st.write("Columns Before Cleaning:", columns_before)
-st.write("Missing Values Before Cleaning:", missing_before)
-st.write("Duplicate Rows Before Cleaning:", duplicates_before)
+if not password:
+    st.info("Enter your MySQL password in the sidebar.")
+    st.stop()
 
-# 2. Remove columns where every value is missing
-empty_columns = df.columns[df.isnull().all()].tolist()
-df = df.drop(columns=empty_columns)
+try:
+    conn = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password=password,
+        database="global_seismic_trends"
+    )
 
-st.write("Completely Empty Columns Removed:", empty_columns)
+    try:
+        df = pd.read_sql_query(
+            "SELECT * FROM earthquakes",
+            conn
+        )
+    finally:
+        conn.close()
 
-# 3. Fill missing numerical values using median
-numeric_columns = ["nst", "dmin", "gap", "rms"]
+except mysql.connector.Error as e:
+    st.error(f"MySQL connection failed: {e}")
+    st.stop()
 
-for col in numeric_columns:
-    if col in df.columns and df[col].isnull().any():
-        median_value = df[col].median()
-        df[col] = df[col].fillna(median_value)
+# 3. BEFORE cleaning metrics
+st.subheader("Data Cleaning - Before")
 
-# 4. Remove duplicate rows
-df = df.drop_duplicates()
+before_rows = len(original)
+before_cols = len(original.columns)
+before_missing = int(original.isnull().sum().sum())
+before_duplicates = int(original.duplicated().sum())
 
-# 5. Convert date columns
-df["time"] = pd.to_datetime(df["time"], errors="coerce", utc=True)
-df["updated"] = pd.to_datetime(df["updated"], errors="coerce", utc=True)
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Rows", before_rows)
+c2.metric("Columns", before_cols)
+c3.metric("Missing Values", before_missing)
+c4.metric("Duplicate Rows", before_duplicates)
 
-# 6. Check data after cleaning
-missing_after = int(df.isnull().sum().sum())
-duplicates_after = int(df.duplicated().sum())
+st.write("Missing values by column")
+missing_cols = original.isnull().sum()
 
-st.write("Missing Values After Cleaning:", missing_after)
-st.write("Duplicate Rows After Cleaning:", duplicates_after)
-st.write("Rows After Cleaning:", len(df))
-st.write("Columns After Cleaning:", len(df.columns))
+st.dataframe(
+    missing_cols[missing_cols > 0].rename("Missing Count")
+)
 
-# 7. Summary
+# 4. AFTER cleaning metrics - MySQL data
+st.subheader("Data Cleaning - After (MySQL)")
+
+after_rows = len(df)
+after_cols = len(df.columns)
+after_missing = int(df.isnull().sum().sum())
+after_duplicates = int(df.duplicated().sum())
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Rows", after_rows)
+c2.metric("Columns", after_cols)
+c3.metric("Missing Values", after_missing)
+c4.metric("Duplicate Rows", after_duplicates)
+
+if after_missing == 0 and after_duplicates == 0:
+    st.success("Cleaning verification passed.")
+else:
+    st.warning(
+        "Please review the remaining data quality issues."
+    )
+
+st.write("Columns removed:", before_cols - after_cols)
+st.write("Rows removed:", before_rows - after_rows)
+
+# 5. Earthquake summary
 st.subheader("Earthquake Summary")
 
-col1, col2, col3 = st.columns(3)
+if "mag" in df.columns:
+    df["mag"] = pd.to_numeric(
+        df["mag"], errors="coerce"
+    )
+    valid_mag = df["mag"].dropna()
 
-col1.metric("Total Records", len(df))
-col2.metric("Average Magnitude", round(df["mag"].mean(), 2))
-col3.metric("Maximum Magnitude", round(df["mag"].max(), 2))
+    if not valid_mag.empty:
+        c1, c2, c3 = st.columns(3)
 
-# 8. Earthquake data table
-st.subheader("Earthquake Data")
-st.dataframe(df, use_container_width=True)
+        c1.metric("Total Records", len(df))
+        c2.metric(
+            "Average Magnitude",
+            round(valid_mag.mean(), 2)
+        )
+        c3.metric(
+            "Maximum Magnitude",
+            round(valid_mag.max(), 2)
+        )
 
-# 9. Magnitude analysis
-st.subheader("Earthquake Magnitude Analysis")
-st.bar_chart(df["mag"].value_counts().sort_index())
+        # Magnitude frequency chart
+        st.subheader("Earthquake Magnitude Analysis")
 
-# 10. Highest magnitude earthquake
-st.subheader("Highest Magnitude Earthquake")
+        mag_counts = (
+            valid_mag.round(1)
+            .value_counts()
+            .sort_index()
+        )
 
-max_row = df.loc[df["mag"].idxmax()]
+        st.bar_chart(mag_counts)
 
-st.write("Magnitude:", max_row["mag"])
-st.write("Location:", max_row["place"])
-st.write("Depth:", max_row["depth"])
+        # Highest magnitude earthquake
+        max_idx = valid_mag.idxmax()
+        max_row = df.loc[max_idx]
 
-# 11. Depth analysis
-st.subheader("Earthquake Depth Analysis")
-st.line_chart(df["depth"])
+        st.subheader("Highest Magnitude Earthquake")
+        st.write("Magnitude:", round(float(max_row["mag"]), 2))
+
+        if "place" in df.columns:
+            st.write("Location:", max_row["place"])
+
+        if "depth" in df.columns:
+            st.write("Depth (km):", max_row["depth"])
+
+
+
+
+
+
+
+
+# 6. Earthquake depth distribution
+
+import matplotlib.pyplot as plt
+
+if "depth" in df.columns:
+    depth = pd.to_numeric(
+        df["depth"], errors="coerce"
+    ).dropna()
+
+    # Keep valid depths between 0 and 100 km
+    depth = depth[(depth >= 0) & (depth <= 100)]
+
+    st.write("Valid depth records:", len(depth))
+
+    if not depth.empty:
+        st.write(
+            "Depth range:",
+            depth.min(),
+            "to",
+            depth.max()
+        )
+
+        st.subheader("Earthquake Depth Distribution")
+
+        # Create 20 bins, each 5 km wide
+        depth_bins = pd.cut(
+            depth,
+            bins=list(range(0, 101, 5)),
+            right=True,
+            labels=False,
+            include_lowest=True
+        )
+
+        depth_counts = (
+            depth_bins.value_counts()
+            .reindex(range(20), fill_value=0)
+            .sort_index()
+        )
+
+       
+
+        labels = [
+            f"{i * 5}–{(i + 1) * 5}"
+            for i in range(20)
+        ]
+
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        ax.barh(
+            labels,
+            depth_counts.to_numpy()
+        )
+
+        ax.invert_yaxis()
+        ax.set_xlabel("Earthquake Count")
+        ax.set_ylabel("Depth Range (km)")
+        ax.set_title("Earthquake Depth Distribution")
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+        st.caption(
+            "Earthquake depths are grouped into "
+            "20 numerically ordered ranges (km), "
+            "from 0 to 100 km."
+        )
